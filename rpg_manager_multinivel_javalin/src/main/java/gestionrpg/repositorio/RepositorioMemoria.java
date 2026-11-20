@@ -9,7 +9,8 @@ import java.util.Map;
 
 /**
  * Implementación en memoria: un HashMap cuya clave es el id.
- * Sirve para probar sin base de datos. Al reiniciar el servidor, todo se pierde.
+ * Sirve para probar sin base de datos. Al reiniciar el servidor, todo se
+ * pierde.
  */
 public class RepositorioMemoria implements PersonajeRepository {
 
@@ -27,25 +28,33 @@ public class RepositorioMemoria implements PersonajeRepository {
 
     private final Map<Integer, Personaje> datos = new HashMap<>();
     private final Map<Integer, List<Item>> inventarios = new HashMap<>();
-    private int siguienteId = 1;    // como AUTO_INCREMENT: nunca reutiliza un id
+    private int siguienteId = 1; // como AUTO_INCREMENT: nunca reutiliza un id
 
     @Override
     public Personaje guardar(Personaje p) {
         // Misma regla que el UNIQUE de MariaDB sobre el nombre
         // >>> SALA 2.2 · RepositorioMemoria
-        // Arma este bloque en el Edificio de la Persistencia (pestaña Java),
-        // pulsa «Copiar bloque» y pégalo entre estas dos marcas.
+        for (Personaje existente : datos.values()) {
+            if (existente.getNombre().equals(p.getNombre())) { // equals, no ==
+                throw new DatoDuplicadoException(p.getNombre(), null);
+            }
+        }
+        p.setId(siguienteId++);
+        datos.put(p.getId(), p);
+        inventarios.put(p.getId(), new ArrayList<>());
+        return p;
+
         // <<< FIN SALA 2.2
     }
 
     @Override
     public Personaje buscarPorId(int id) {
-        return datos.get(id);    // null si no existe
+        return datos.get(id); // null si no existe
     }
 
     @Override
     public List<Personaje> listarTodos() {
-        return new ArrayList<>(datos.values());   // copia: quien la reciba no puede dañar el mapa
+        return new ArrayList<>(datos.values()); // copia: quien la reciba no puede dañar el mapa
     }
 
     @Override
@@ -113,7 +122,8 @@ public class RepositorioMemoria implements PersonajeRepository {
     @Override
     public boolean quitarItem(int idPersonaje, String nombreItem) {
         List<Item> inventario = inventarios.getOrDefault(idPersonaje, new ArrayList<>());
-        // removeIf en vez de borrar dentro de un for-each (ConcurrentModificationException)
+        // removeIf en vez de borrar dentro de un for-each
+        // (ConcurrentModificationException)
         return inventario.removeIf(item -> item.getNombre().equals(nombreItem));
     }
 }
