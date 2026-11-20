@@ -18,25 +18,27 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Implementación con MariaDB: SQL escrito a mano (JDBC) sobre las tablas de la nivelación.
+ * Implementación con MariaDB: SQL escrito a mano (JDBC) sobre las tablas de la
+ * nivelación.
  * Tablas que usa: personaje, clase, inventario, item.
- * Requiere haber ejecutado db/alter_persistencia.sql (columnas mana y precision_tiro).
+ * Requiere haber ejecutado db/alter_persistencia.sql (columnas mana y
+ * precision_tiro).
  */
 public class RepositorioMariaDB implements PersonajeRepository {
 
-    private static final int ERROR_DUPLICADO = 1062;    // violación de UNIQUE
-    private static final int ERROR_FK_EN_USO = 1451;    // otra tabla apunta a esta fila
+    private static final int ERROR_DUPLICADO = 1062; // violación de UNIQUE
+    private static final int ERROR_FK_EN_USO = 1451; // otra tabla apunta a esta fila
 
-    // La clase NO está como texto en personaje: se trae de la tabla clase con un JOIN
-    private static final String SELECT_PERSONAJE =
-            "SELECT p.id_personaje, p.nombre, c.nombre AS clase, p.nivel, p.vida,"
+    // La clase NO está como texto en personaje: se trae de la tabla clase con un
+    // JOIN
+    private static final String SELECT_PERSONAJE = "SELECT p.id_personaje, p.nombre, c.nombre AS clase, p.nivel, p.vida,"
             + " p.ataque, p.oro, p.mana, p.precision_tiro"
             + " FROM personaje p JOIN clase c ON p.id_clase = c.id_clase";
 
     private final String url;
     private final String usuario;
     private final String clave;
-    private final Map<String, Integer> idClase = new HashMap<>();   // "Mago" -> 2
+    private final Map<String, Integer> idClase = new HashMap<>(); // "Mago" -> 2
 
     public RepositorioMariaDB(String host, String puerto, String base, String usuario, String clave) {
         this.url = "jdbc:mariadb://" + host + ":" + puerto + "/" + base;
@@ -44,8 +46,8 @@ public class RepositorioMariaDB implements PersonajeRepository {
         this.clave = clave;
         // Mapa nombre de clase -> id_clase, cargado una sola vez al arrancar
         try (Connection con = conectar();
-             Statement st = con.createStatement();
-             ResultSet rs = st.executeQuery("SELECT id_clase, nombre FROM clase")) {
+                Statement st = con.createStatement();
+                ResultSet rs = st.executeQuery("SELECT id_clase, nombre FROM clase")) {
             while (rs.next()) {
                 idClase.put(rs.getString("nombre"), rs.getInt("id_clase"));
             }
@@ -70,12 +72,27 @@ public class RepositorioMariaDB implements PersonajeRepository {
     private List<Personaje> consultar(String sql, Object... parametros) {
         List<Personaje> resultado = new ArrayList<>();
         // >>> SALA 2.3 · MariaDB: leer un personaje
-        // Arma este bloque en el Edificio de la Persistencia (pestaña Java),
-        // pulsa «Copiar bloque» y pégalo entre estas dos marcas.
+        try (Connection con = conectar();
+                PreparedStatement ps = con.prepareStatement(sql)) {
+            for (int i = 0; i < parametros.length; i++) {
+                ps.setObject(i + 1, parametros[i]);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    resultado.add(filaAPersonaje(rs));
+                }
+            }
+        } catch (SQLException e) {
+            throw new AccesoDatosException("Error consultando personajes", e);
+        }
+        return resultado;
         // <<< FIN SALA 2.3
     }
 
-    /** Pone en el PreparedStatement los campos que comparten INSERT y UPDATE (posiciones 1 a 8). */
+    /**
+     * Pone en el PreparedStatement los campos que comparten INSERT y UPDATE
+     * (posiciones 1 a 8).
+     */
     private void ponerCampos(PreparedStatement ps, Personaje p) throws SQLException {
         ps.setString(1, p.getNombre());
         ps.setInt(2, idClase.get(p.getClase()));
@@ -100,10 +117,22 @@ public class RepositorioMariaDB implements PersonajeRepository {
         String sql = "INSERT INTO personaje (nombre, id_clase, nivel, vida, ataque, oro, mana, precision_tiro)"
                 + " VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         try (Connection con = conectar();
-             PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+                PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             // >>> SALA 2.4 · MariaDB: guardar con INSERT
-            // Arma este bloque en el Edificio de la Persistencia (pestaña Java),
-            // pulsa «Copiar bloque» y pégalo entre estas dos marcas.
+            ponerCampos(ps, p);
+            ps.executeUpdate(); // JDBC hace commit automático (autocommit)
+            try (ResultSet claves = ps.getGeneratedKeys()) {
+                if (claves.next()) {
+                    p.setId(claves.getInt(1)); // id generado por AUTO_INCREMENT
+                }
+            }
+            return p;
+        } catch (SQLException e) {
+            if (e.getErrorCode() == ERROR_DUPLICADO) {
+                throw new DatoDuplicadoException(p.getNombre(), e);
+            }
+            throw new AccesoDatosException("Error guardando personaje", e);
+
             // <<< FIN SALA 2.4
         }
     }
@@ -129,11 +158,12 @@ public class RepositorioMariaDB implements PersonajeRepository {
         String sql = "UPDATE personaje SET nombre = ?, id_clase = ?, nivel = ?, vida = ?, ataque = ?,"
                 + " oro = ?, mana = ?, precision_tiro = ? WHERE id_personaje = ?";
         try (Connection con = conectar();
-             PreparedStatement ps = con.prepareStatement(sql)) {
+                PreparedStatement ps = con.prepareStatement(sql)) {
             ponerCampos(ps, p);
             ps.setInt(9, p.getId());
             int filas = ps.executeUpdate();
-            // MariaDB cuenta 0 filas si el UPDATE no cambió nada; por eso se confirma que exista
+            // MariaDB cuenta 0 filas si el UPDATE no cambió nada; por eso se confirma que
+            // exista
             return filas > 0 || buscarPorId(p.getId()) != null;
         } catch (SQLException e) {
             if (e.getErrorCode() == ERROR_DUPLICADO) {
@@ -149,7 +179,8 @@ public class RepositorioMariaDB implements PersonajeRepository {
         // Arma este bloque en el Edificio de la Persistencia (pestaña Java),
         // pulsa «Copiar bloque» y pégalo entre estas dos marcas.
         // <<< FIN SALA 2.5
-        }
+    }
+
     }
 
     @Override
@@ -159,7 +190,7 @@ public class RepositorioMariaDB implements PersonajeRepository {
                 + " WHERE inv.id_personaje = ? ORDER BY i.nombre";
         List<Item> items = new ArrayList<>();
         try (Connection con = conectar();
-             PreparedStatement ps = con.prepareStatement(sql)) {
+                PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, idPersonaje);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -177,8 +208,8 @@ public class RepositorioMariaDB implements PersonajeRepository {
     public List<Item> listarCatalogo() {
         List<Item> items = new ArrayList<>();
         try (Connection con = conectar();
-             Statement st = con.createStatement();
-             ResultSet rs = st.executeQuery("SELECT nombre, tipo, valor FROM item ORDER BY tipo, nombre")) {
+                Statement st = con.createStatement();
+                ResultSet rs = st.executeQuery("SELECT nombre, tipo, valor FROM item ORDER BY tipo, nombre")) {
             while (rs.next()) {
                 items.add(new Item(rs.getString("nombre"), rs.getString("tipo"), rs.getInt("valor"), 1));
             }
@@ -197,11 +228,11 @@ public class RepositorioMariaDB implements PersonajeRepository {
                 + " SELECT ?, id_item, ? FROM item WHERE nombre = ?"
                 + " ON DUPLICATE KEY UPDATE cantidad = inventario.cantidad + VALUES(cantidad)";
         try (Connection con = conectar();
-             PreparedStatement ps = con.prepareStatement(sql)) {
+                PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, idPersonaje);
             ps.setInt(2, cantidad);
             ps.setString(3, nombreItem);
-            return ps.executeUpdate() > 0;      // 0 filas: el ítem no existe en la tabla item
+            return ps.executeUpdate() > 0; // 0 filas: el ítem no existe en la tabla item
         } catch (SQLException e) {
             throw new AccesoDatosException("Error agregando ítem al inventario", e);
         }
@@ -212,7 +243,7 @@ public class RepositorioMariaDB implements PersonajeRepository {
         String sql = "DELETE inv FROM inventario inv JOIN item i ON inv.id_item = i.id_item"
                 + " WHERE inv.id_personaje = ? AND i.nombre = ?";
         try (Connection con = conectar();
-             PreparedStatement ps = con.prepareStatement(sql)) {
+                PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, idPersonaje);
             ps.setString(2, nombreItem);
             return ps.executeUpdate() > 0;
