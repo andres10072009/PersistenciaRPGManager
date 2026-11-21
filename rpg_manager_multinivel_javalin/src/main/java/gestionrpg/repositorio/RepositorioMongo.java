@@ -30,11 +30,13 @@ import org.bson.Document;
 import org.bson.conversions.Bson;
 
 /**
- * Implementación con MongoDB: la colección personajes cargada con el seed de la nivelación.
+ * Implementación con MongoDB: la colección personajes cargada con el seed de la
+ * nivelación.
  * Un Document se usa como un Map: put/append para escribir, get para leer.
  *
  * Decisión sobre el id: los documentos del seed solo tienen _id (ObjectId) y el
- * Service trabaja con ids numéricos. Este repositorio agrega a cada documento un
+ * Service trabaja con ids numéricos. Este repositorio agrega a cada documento
+ * un
  * campo numérico id_personaje, tomado de un contador en la colección
  * "contadores" (el equivalente al AUTO_INCREMENT). El Service nunca se entera.
  */
@@ -42,7 +44,7 @@ public class RepositorioMongo implements PersonajeRepository {
 
     private final MongoCollection<Document> personajes;
     private final MongoCollection<Document> contadores;
-    private final MongoCollection<Document> items;      // catálogo: lo crea db/mongo_persistencia.js
+    private final MongoCollection<Document> items; // catálogo: lo crea db/mongo_persistencia.js
 
     public RepositorioMongo(String uri, String base) {
         MongoClient cliente = MongoClients.create(uri);
@@ -111,7 +113,7 @@ public class RepositorioMongo implements PersonajeRepository {
                 .append("nivel", p.getNivel())
                 .append("vida", p.getVida())
                 .append("ataque", p.getAtaque())
-                .append("oro", p.getOro().doubleValue());   // el seed guarda oro como número
+                .append("oro", p.getOro().doubleValue()); // el seed guarda oro como número
         if (p instanceof Mago) {
             campos.append("mana", ((Mago) p).getMana());
         }
@@ -136,8 +138,23 @@ public class RepositorioMongo implements PersonajeRepository {
     @Override
     public Personaje guardar(Personaje p) {
         // >>> SALA 2.6 · MongoDB: guardar con contador
-        // Arma este bloque en el Edificio de la Persistencia (pestaña Java),
-        // pulsa «Copiar bloque» y pégalo entre estas dos marcas.
+        if (personajes.find(eq("nombre", p.getNombre())).first() != null) {
+            throw new DatoDuplicadoException(p.getNombre(), null);
+        }
+        Document documento = camposDe(p)
+                .append("inventario", new ArrayList<Document>())
+                .append("misiones", new ArrayList<Document>())
+                .append("id_personaje", siguienteId());
+        try {
+            personajes.insertOne(documento);
+        } catch (MongoWriteException e) {
+            if (esDuplicado(e)) {
+                throw new DatoDuplicadoException(p.getNombre(), e);
+            }
+            throw e;
+        }
+        p.setId(documento.getInteger("id_personaje"));
+
         // <<< FIN SALA 2.6
         return p;
     }
@@ -160,7 +177,8 @@ public class RepositorioMongo implements PersonajeRepository {
 
     @Override
     public boolean actualizar(Personaje p) {
-        // $set cambia solo esos campos: el inventario y las misiones embebidas se conservan
+        // $set cambia solo esos campos: el inventario y las misiones embebidas se
+        // conservan
         try {
             return personajes.updateOne(eq("id_personaje", p.getId()), new Document("$set", camposDe(p)))
                     .getMatchedCount() > 0;
@@ -174,7 +192,8 @@ public class RepositorioMongo implements PersonajeRepository {
 
     @Override
     public boolean eliminar(int id) {
-        // MongoDB no tiene llaves foráneas: no revisa si el personaje aparece en combates
+        // MongoDB no tiene llaves foráneas: no revisa si el personaje aparece en
+        // combates
         return personajes.deleteOne(eq("id_personaje", id)).getDeletedCount() > 0;
     }
 
@@ -206,7 +225,8 @@ public class RepositorioMongo implements PersonajeRepository {
 
     @Override
     public boolean agregarItem(int idPersonaje, String nombreItem, int cantidad) {
-        // 1. Si ya lo tiene: $inc sobre ese elemento del arreglo ($ = el que cumplió el filtro)
+        // 1. Si ya lo tiene: $inc sobre ese elemento del arreglo ($ = el que cumplió el
+        // filtro)
         // >>> SALA 2.8 · Inventario: agregar un ítem
         // Arma este bloque en el Edificio de la Persistencia (pestaña Java),
         // pulsa «Copiar bloque» y pégalo entre estas dos marcas.

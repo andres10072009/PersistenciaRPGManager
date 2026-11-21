@@ -52,4 +52,5 @@ class PersonajeRepository(ABC):
 
  @abstractmethod
  def quitar_item(self, id_personaje, nombre_item):
+
         """Saca el ítem completo del inventario. True si lo tenía."""
