@@ -18,8 +18,15 @@ class PersonajeNoEncontradoException(Exception):
 
 
 # >>> SALA 3.1 · Inyección por constructor
-# Arma este bloque en el Edificio de la Persistencia (pestaña Python),
-# pulsa «Copiar bloque» y pégalo entre estas dos marcas.
+class PersonajeService:
+    def __init__(self, repositorio):
+        self._repositorio = repositorio
+
+    # ---------- consultas ----------
+
+    def listar(self):
+        return self._repositorio.listar_todos()
+
 # <<< FIN SALA 3.1
 
     def listar_por_clase(self, clase):
@@ -27,8 +34,16 @@ class PersonajeNoEncontradoException(Exception):
         return self._repositorio.listar_por_clase(clase)
 
     # >>> SALA 3.2 · Obtener: de null a 404
-    # Arma este bloque en el Edificio de la Persistencia (pestaña Python),
-    # pulsa «Copiar bloque» y pégalo entre estas dos marcas.
+    def obtener(self, id):
+        personaje = self._repositorio.buscar_por_id(id)
+        if personaje is None:
+            raise PersonajeNoEncontradoException(f"No existe el personaje {id}")
+        return personaje
+
+    def inventario(self, id):
+        self.obtener(id)    # 404 si el personaje no existe
+        return self._repositorio.listar_inventario(id)
+
     # <<< FIN SALA 3.2
 
     def catalogo(self):

@@ -16,9 +16,20 @@ import java.util.List;
  * PersonajeRepository: no sabe si detrás hay memoria, MariaDB o MongoDB.
  */
 // >>> SALA 3.1 · Inyección por constructor
-// Arma este bloque en el Edificio de la Persistencia (pestaña Java),
-// pulsa «Copiar bloque» y pégalo entre estas dos marcas.
-// <<< FIN SALA 3.1
+public class PersonajeService {
+
+    private final PersonajeRepository repositorio;
+
+    public PersonajeService(PersonajeRepository repositorio) {
+        this.repositorio = repositorio;
+    }
+
+    // ---------- consultas ----------
+
+    public List<Personaje> listar() {
+        return repositorio.listarTodos();
+
+        // <<< FIN SALA 3.1
     }
 
     public List<Personaje> listarPorClase(String clase) {
@@ -27,9 +38,19 @@ import java.util.List;
     }
 
     // >>> SALA 3.2 · Obtener: de null a 404
-    // Arma este bloque en el Edificio de la Persistencia (pestaña Java),
-    // pulsa «Copiar bloque» y pégalo entre estas dos marcas.
-    // <<< FIN SALA 3.2
+    public Personaje obtener(int id) {
+        Personaje p = repositorio.buscarPorId(id);
+        if (p == null) {
+            throw new PersonajeNoEncontradoException(id);
+        }
+        return p;
+    }
+
+    public List<Item> inventario(int id) {
+        obtener(id); // 404 si el personaje no existe
+        return repositorio.listarInventario(id);
+
+        // <<< FIN SALA 3.2
     }
 
     public List<Item> catalogo() {
@@ -79,7 +100,8 @@ import java.util.List;
         // Arma este bloque en el Edificio de la Persistencia (pestaña Java),
         // pulsa «Copiar bloque» y pégalo entre estas dos marcas.
         // <<< FIN SALA 3.3
-        }
+    }
+
     }
 
     public Personaje actualizarVida(int id, int vida) {
